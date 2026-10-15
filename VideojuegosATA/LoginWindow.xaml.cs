@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Collections.Generic;
+using System.Windows;
 using System.Windows.Media;
 
 namespace VideojuegosATA
@@ -6,12 +7,17 @@ namespace VideojuegosATA
     public partial class LoginWindow : Window
     {
         // Credenciales en memoria (Usuario, Contraseña)
-        private readonly string[,] usuariosBD = new string[,]
+        private readonly Dictionary<string, string> usuariosBD = new Dictionary<string, string>
         {
             { "admin", "1234" },
             { "alumno", "dam2026" },
             { "user", "password" }
         };
+
+        // Contador de intentos fallidos por usuario (TC05 / TC07)
+        private int intentosFallidos = 0;
+        private const int MAX_INTENTOS = 3;
+        private bool usuarioBloqueado = false;
 
         public LoginWindow()
         {
@@ -20,37 +26,56 @@ namespace VideojuegosATA
 
         private void BtnLogin_Click(object sender, RoutedEventArgs e)
         {
-            string usuarioIngresado = txtUsuario.Text.Trim();
-            string passwordIngresada = txtPassword.Password.Trim();
-
-            // 1. Validar campos vacíos
-            if (string.IsNullOrEmpty(usuarioIngresado) || string.IsNullOrEmpty(passwordIngresada))
+            // TC05 / TC07: Verificar si la cuenta está bloqueada
+            if (usuarioBloqueado)
             {
-                MostrarMensaje("Por favor, llena todos los campos.", Colors.OrangeRed);
+                MostrarMensaje("El usuario se encuentra bloqueado temporalmente por exceder los intentos.", Colors.OrangeRed);
                 return;
             }
 
-            // 2. Comprobar credenciales en la matriz en memoria
-            bool esValido = false;
-            for (int i = 0; i < usuariosBD.GetLength(0); i++)
+            string usuarioIngresado = txtUsuario.Text.Trim();
+            string passwordIngresada = txtPassword.Password.Trim();
+
+            // TC 04: No se rellenan los campos
+            if (string.IsNullOrEmpty(usuarioIngresado) || string.IsNullOrEmpty(passwordIngresada))
             {
-                if (usuariosBD[i, 0] == usuarioIngresado && usuariosBD[i, 1] == passwordIngresada)
-                {
-                    esValido = true;
-                    break;
-                }
+                MostrarMensaje("Por favor, rellene todos los campos del login y contraseña.", Colors.OrangeRed);
+                return;
             }
 
-            // 3. Redirigir según el resultado
-            if (esValido)
+            // TC 03: Inicio de sesión si el usuario no existe
+            if (!usuariosBD.ContainsKey(usuarioIngresado))
             {
+                MostrarMensaje("El usuario introducido no existe.", Colors.OrangeRed);
+                return;
+            }
+
+            // TC 01: Inicio de sesión exitoso
+            if (usuariosBD[usuarioIngresado] == passwordIngresada)
+            {
+                intentosFallidos = 0; // Reiniciar contador tras éxito
+
+                // Redirigir a F_Principal (pantalla de bienvenida)
                 F_Principal bienvenida = new F_Principal(usuarioIngresado);
                 bienvenida.Show();
                 this.Close();
             }
             else
             {
-                MostrarMensaje("Usuario o contraseña incorrectos.", Colors.Red);
+                // TC 02: Contraseña incorrecta
+                intentosFallidos++;
+
+                // TC 05 / TC 07: Control de 3 intentos fallidos
+                if (intentosFallidos >= MAX_INTENTOS)
+                {
+                    usuarioBloqueado = true;
+                    MostrarMensaje("Ha introducido 3 veces mal la contraseña. El usuario ha sido bloqueado temporalmente.", Colors.OrangeRed);
+                }
+                else
+                {
+                    int intentosRestantes = MAX_INTENTOS - intentosFallidos;
+                    MostrarMensaje($"La contraseña introducida no es correcta. (Intentos restantes: {intentosRestantes})", Colors.OrangeRed);
+                }
             }
         }
 
@@ -61,9 +86,10 @@ namespace VideojuegosATA
             lblMensaje.Visibility = Visibility.Visible;
         }
 
+        // TC 06: Salir de la aplicación
         private void BtnSalir_Click(object sender, RoutedEventArgs e)
         {
-            Application.Current.Shutdown(); // Cierra toda la aplicación
+            Application.Current.Shutdown();
         }
     }
 }
