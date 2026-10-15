@@ -8,4 +8,31 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="bin\**" />
+    <EmbeddedResource Remove="bin\**" />
+    <None Remove="bin\**" />
+    <Page Remove="bin\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Images\brawlStars.jpg" />
+    <None Remove="Images\clashClans.jpg" />
+    <None Remove="Images\clashRoyale.jpg" />
+    <None Remove="Images\fortnite.jpg" />
+    <None Remove="Images\minecraft.jpg" />
+    <None Remove="Images\perfil.jpg" />
+    <None Remove="Images\roblox.jpg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Images\brawlStars.jpg" />
+    <Resource Include="Images\clashClans.jpg" />
+    <Resource Include="Images\clashRoyale.jpg" />
+    <Resource Include="Images\fortnite.jpg" />
+    <Resource Include="Images\minecraft.jpg" />
+    <Resource Include="Images\perfil.jpg" />
+    <Resource Include="Images\roblox.jpg" />
+  </ItemGroup>
+
 </Project>
