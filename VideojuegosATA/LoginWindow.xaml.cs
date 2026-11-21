@@ -1,92 +1,118 @@
-﻿using System.Collections.Generic;
+﻿using MySql.Data.MySqlClient;
+using System;
 using System.Windows;
-using System.Windows.Media;
 
 namespace VideojuegosATA
 {
     public partial class LoginWindow : Window
     {
-        // Credenciales en memoria (Usuario, Contraseña)
-        private readonly Dictionary<string, string> usuariosBD = new Dictionary<string, string>
-        {
-            { "admin", "1234" },
-            { "alumno", "dam2026" },
-            { "user", "password" }
-        };
-
-        // Contador de intentos fallidos por usuario (TC05 / TC07)
-        private int intentosFallidos = 0;
-        private const int MAX_INTENTOS = 3;
-        private bool usuarioBloqueado = false;
-
         public LoginWindow()
         {
             InitializeComponent();
         }
 
+        // PASO 4: BOTÓN LOGIN
         private void BtnLogin_Click(object sender, RoutedEventArgs e)
         {
-            // TC05 / TC07: Verificar si la cuenta está bloqueada
-            if (usuarioBloqueado)
+            string usuario = txtUsuario.Text.Trim();
+            string password = txtPassword.Password;
+
+            // 1. Validación de campos vacíos (regresión Práctica 2)
+            if (string.IsNullOrEmpty(usuario) || string.IsNullOrEmpty(password))
             {
-                MostrarMensaje("El usuario se encuentra bloqueado temporalmente por exceder los intentos.", Colors.OrangeRed);
+                MessageBox.Show("Por favor, rellena todos los campos.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            string usuarioIngresado = txtUsuario.Text.Trim();
-            string passwordIngresada = txtPassword.Password.Trim();
-
-            // TC 04: No se rellenan los campos
-            if (string.IsNullOrEmpty(usuarioIngresado) || string.IsNullOrEmpty(passwordIngresada))
+            // 2. Consulta parametrizada a MySQL
+            try
             {
-                MostrarMensaje("Por favor, rellene todos los campos del login y contraseña.", Colors.OrangeRed);
-                return;
-            }
-
-            // TC 03: Inicio de sesión si el usuario no existe
-            if (!usuariosBD.ContainsKey(usuarioIngresado))
-            {
-                MostrarMensaje("El usuario introducido no existe.", Colors.OrangeRed);
-                return;
-            }
-
-            // TC 01: Inicio de sesión exitoso
-            if (usuariosBD[usuarioIngresado] == passwordIngresada)
-            {
-                intentosFallidos = 0; // Reiniciar contador tras éxito
-
-                // Redirigir a F_Principal (pantalla de bienvenida)
-                F_Principal bienvenida = new F_Principal(usuarioIngresado);
-                bienvenida.Show();
-                this.Close();
-            }
-            else
-            {
-                // TC 02: Contraseña incorrecta
-                intentosFallidos++;
-
-                // TC 05 / TC 07: Control de 3 intentos fallidos
-                if (intentosFallidos >= MAX_INTENTOS)
+                using (MySqlConnection conn = DatabaseHelper.GetConnection())
                 {
-                    usuarioBloqueado = true;
-                    MostrarMensaje("Ha introducido 3 veces mal la contraseña. El usuario ha sido bloqueado temporalmente.", Colors.OrangeRed);
+                    conn.Open();
+                    string query = "SELECT COUNT(*) FROM Usuarios WHERE nombre_usuario = @usuario AND password = @password";
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@usuario", usuario);
+                        cmd.Parameters.AddWithValue("@password", password);
+
+                        int count = Convert.ToInt32(cmd.ExecuteScalar());
+
+                        if (count > 0)
+                        {
+                            MessageBox.Show("¡Bienvenido!", "Login correcto", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                            // Pasamos el nombre de usuario al constructor de F_Principal
+                            F_Principal principal = new F_Principal(usuario);
+                            principal.Show();
+                            this.Close();
+                        }
+                        else
+                        {
+                            MessageBox.Show("Usuario o contraseña incorrectos.", "Error de acceso", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                MessageBox.Show("No se pudo conectar con la base de datos.\nDetalle: " + ex.Message, "Error de conexión", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ocurrió un error inesperado: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // PASO 5 y 6: BOTÓN NUEVO USUARIO Y CONTROL DE DUPLICADOS/ERRORES
+        private void BtnNuevoUsuario_Click(object sender, RoutedEventArgs e)
+        {
+            string usuario = txtUsuario.Text.Trim();
+            string password = txtPassword.Password;
+
+            if (string.IsNullOrEmpty(usuario) || string.IsNullOrEmpty(password))
+            {
+                MessageBox.Show("Introduce un usuario y una contraseña para registrarte.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                using (MySqlConnection conn = DatabaseHelper.GetConnection())
+                {
+                    conn.Open();
+                    string query = "INSERT INTO Usuarios (nombre_usuario, password) VALUES (@usuario, @password)";
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@usuario", usuario);
+                        cmd.Parameters.AddWithValue("@password", password);
+                        int filasAfectadas = cmd.ExecuteNonQuery();
+                        if (filasAfectadas > 0)
+                        {
+                            MessageBox.Show("Usuario registrado correctamente.", "Registro", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                // Error 1062 = Violación de restricción UNIQUE (usuario ya existe)
+                if (ex.Number == 1062)
+                {
+                    MessageBox.Show("El nombre de usuario ya existe. Elige otro.", "Usuario duplicado", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 else
                 {
-                    int intentosRestantes = MAX_INTENTOS - intentosFallidos;
-                    MostrarMensaje($"La contraseña introducida no es correcta. (Intentos restantes: {intentosRestantes})", Colors.OrangeRed);
+                    MessageBox.Show("Error de conexión con la base de datos.\nDetalle: " + ex.Message, "Error de MySQL", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error inesperado: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void MostrarMensaje(string mensaje, Color color)
-        {
-            lblMensaje.Text = mensaje;
-            lblMensaje.Foreground = new SolidColorBrush(color);
-            lblMensaje.Visibility = Visibility.Visible;
-        }
-
-        // TC 06: Salir de la aplicación
+        // BOTÓN SALIR (Práctica 2)
         private void BtnSalir_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();

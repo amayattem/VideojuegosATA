@@ -1,83 +1,131 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using MySql.Data.MySqlClient;
+using System;
 using System.Windows;
 
 namespace VideojuegosATA
 {
     public partial class F_Login : Window
     {
-        // Diccionario de ejemplo (simulando usuarios registrados en BD)
-        private readonly Dictionary<string, string> usuariosRegistrados = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "admin", "1234" },
-            { "juan", "juegos2026" },
-            { "maria", "gamer123" }
-        };
-
         public F_Login()
         {
             InitializeComponent();
         }
 
+        // PASO 4: BOTÓN LOGIN
         private void btnLogin_Click(object sender, RoutedEventArgs e)
         {
             string usuario = txtUsuario.Text.Trim();
             string password = txtPassword.Password;
 
-            // 1. Validar campos vacíos
-            if (string.IsNullOrWhiteSpace(usuario) || string.IsNullOrWhiteSpace(password))
+            // 1. Validación de campos vacíos (regresión Práctica 2)[cite: 1]
+            if (string.IsNullOrEmpty(usuario) || string.IsNullOrEmpty(password))
             {
-                MostrarMensaje("Por favor, rellene todos los campos.", System.Windows.Media.Brushes.OrangeRed);
+                MessageBox.Show("Por favor, rellena todos los campos.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            // 2. Verificar si el usuario EXISTE en la base de datos/diccionario
-            if (!usuariosRegistrados.ContainsKey(usuario))
+            // 2. Consulta parametrizada a MySQL[cite: 1]
+            try
             {
-                MostrarMensaje("El usuario ingresado no existe.", System.Windows.Media.Brushes.IndianRed);
-                txtUsuario.Focus();
-                txtUsuario.SelectAll();
+                using (MySqlConnection conn = DatabaseHelper.GetConnection())
+                {
+                    conn.Open();
+                    string query = "SELECT COUNT(*) FROM Usuarios WHERE nombre_usuario = @usuario AND password = @password";
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@usuario", usuario);
+                        cmd.Parameters.AddWithValue("@password", password);
+
+                        int count = Convert.ToInt32(cmd.ExecuteScalar());
+
+                        if (count > 0)
+                        {
+                            MessageBox.Show("¡Bienvenido!", "Login correcto", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                            // Pasamos el nombre de usuario al constructor de F_Principal
+                            F_Principal principal = new F_Principal(usuario);
+                            principal.Show();
+                            this.Close();
+                        }
+                        else
+                        {
+                            MessageBox.Show("Usuario o contraseña incorrectos.", "Error de acceso", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                MessageBox.Show("No se pudo conectar con la base de datos.\nDetalle: " + ex.Message, "Error de conexión", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ocurrió un error inesperado: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // PASO 5 y 6: BOTÓN NUEVO USUARIO Y CONTROL DE DUPLICADOS/ERRORES[cite: 1]
+        private void btnNuevoUsuario_Click(object sender, RoutedEventArgs e)
+        {
+            string usuario = txtUsuario.Text.Trim();
+            string password = txtPassword.Password;
+
+            if (string.IsNullOrEmpty(usuario) || string.IsNullOrEmpty(password))
+            {
+                MessageBox.Show("Introduce un usuario y una contraseña para registrarte.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            // 3. Si el usuario existe, verificar si la contraseña coincide
-            if (usuariosRegistrados[usuario] == password)
+            try
             {
-                MostrarMensaje("¡Acceso concedido!", System.Windows.Media.Brushes.LightGreen);
+                using (MySqlConnection conn = DatabaseHelper.GetConnection())
+                {
+                    conn.Open();
+                    string query = "INSERT INTO Usuarios (nombre_usuario, password) VALUES (@usuario, @password)";
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@usuario", usuario);
+                        cmd.Parameters.AddWithValue("@password", password);
 
-                F_Principal formularioExito = new F_Principal(usuario);
-                formularioExito.Show();
-                this.Close();
+                        int filasAfectadas = cmd.ExecuteNonQuery();
+                        if (filasAfectadas > 0)
+                        {
+                            MessageBox.Show("Usuario registrado correctamente.", "Registro", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
+                    }
+                }
             }
-            else
+            catch (MySqlException ex)
             {
-                MostrarMensaje("Contraseña incorrecta.", System.Windows.Media.Brushes.IndianRed);
-                txtPassword.Clear();
-                txtPassword.Focus();
+                // Error 1062 = Violación de restricción UNIQUE (usuario ya existe)
+                if (ex.Number == 1062)
+                {
+                    MessageBox.Show("El nombre de usuario ya existe. Elige otro.", "Usuario duplicado", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                else
+                {
+                    MessageBox.Show("Error de conexión con la base de datos.\nDetalle: " + ex.Message, "Error de MySQL", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error inesperado: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void txtUsuario_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            lblMensaje.Content = "";
+        }
+
+        private void txtPassword_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            lblMensaje.Content = "";
         }
 
         private void btnSalir_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();
         }
-
-        private void txtUsuario_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-        {
-            lblMensaje.Content = string.Empty;
-        }
-
-        private void txtPassword_PasswordChanged(object sender, RoutedEventArgs e)
-        {
-            lblMensaje.Content = string.Empty;
-        }
-
-        private void MostrarMensaje(string mensaje, System.Windows.Media.Brush color)
-        {
-            lblMensaje.Content = mensaje;
-            lblMensaje.Foreground = color;
-        }
-
-
-    }
-}
+    } // <-- Cierra la clase F_Login
+} // <-- Cierra el namespace VideojuegosATA
